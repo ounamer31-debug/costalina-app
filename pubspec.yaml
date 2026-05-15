@@ -1,0 +1,45 @@
+name: costalina_app
+description: "Costalina — surveillance du littoral tunisien"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.0.10
+  lucide_icons: ^0.257.0
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  flutter_map_marker_popup: ^7.0.0
+  fl_chart: ^0.69.0
+  cached_network_image: ^3.4.1
+  flutter_animate: ^4.5.0
+  geolocator: ^13.0.1
+  flutter_map_cancellable_tile_provider: ^3.0.2
+  url_launcher: ^6.3.2
+  image_picker: ^1.2.2
+  http: ^1.2.2
+
+  # Auth token storage
+  flutter_secure_storage: ^9.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/brand/costalina-logo.jpg
+    - assets/brand/costalina-mark.svg
