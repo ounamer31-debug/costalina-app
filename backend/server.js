@@ -22,30 +22,16 @@ app.use('/api/users',   require('./routes/users'));
 // Health check
 app.get('/api/health', (_, res) => res.json({ status: 'ok', time: new Date() }));
 
-// Connect to MongoDB
-let connected = false;
-async function connectDB() {
-  if (!connected) {
-    await mongoose.connect(process.env.MONGODB_URI);
-    connected = true;
+// Connect to MongoDB then start
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => {
     console.log('✅  MongoDB connected');
-  }
-}
-
-// Local dev: start server normally
-if (require.main === module) {
-  connectDB().then(() => {
     const port = process.env.PORT || 3000;
     app.listen(port, '0.0.0.0', () =>
       console.log(`🚀  Costalina API running on http://0.0.0.0:${port}`)
     );
-  }).catch(err => {
+  })
+  .catch(err => {
     console.error('❌  MongoDB connection failed:', err.message);
     process.exit(1);
   });
-} else {
-  // Vercel serverless: connect on each cold start
-  connectDB().catch(console.error);
-}
-
-module.exports = app;
