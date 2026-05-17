@@ -1,4 +1,5 @@
 import '../models/beach.dart';
+import '../models/report_type.dart';
 import '../models/signalement.dart';
 import '../models/alerte.dart';
 
@@ -211,7 +212,8 @@ const mockSignalements = <Signalement>[
     id: 's1',
     beachId: 'skanes',
     userId: '',
-    type: 'Recul du sable',
+    type: ReportType.erosion,
+    severity: 4,
     when: 'Il y a 3 jours',
     status: 'pending',
     message: '',
@@ -222,7 +224,8 @@ const mockSignalements = <Signalement>[
     id: 's2',
     beachId: 'skanes',
     userId: '',
-    type: 'Débris sur la plage',
+    type: ReportType.pollution,
+    severity: 3,
     when: 'Il y a 1 semaine',
     status: 'resolved',
     message: '',
@@ -233,7 +236,8 @@ const mockSignalements = <Signalement>[
     id: 's3',
     beachId: 'skanes',
     userId: '',
-    type: 'Construction proche',
+    type: ReportType.infrastructure,
+    severity: 5,
     when: 'Il y a 2 semaines',
     status: 'verified',
     message: '',

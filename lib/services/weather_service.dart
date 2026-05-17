@@ -16,6 +16,14 @@ class WeatherDay {
   const WeatherDay({required this.date, required this.tempMax, required this.tempMin, required this.code});
 }
 
+class MarineData {
+  final double? waveHeight;   // meters
+  final double? wavePeriod;   // seconds
+  final double? waveDir;      // degrees
+  final double? seaSurfTemp;  // °C
+  const MarineData({this.waveHeight, this.wavePeriod, this.waveDir, this.seaSurfTemp});
+}
+
 class WeatherData {
   final double currentTemp;
   final int currentCode;
@@ -129,6 +137,33 @@ class WeatherService {
         cityName:    cityName,
         days:        days,
         hours:       hours,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<MarineData?> fetchMarine({
+    required double lat,
+    required double lng,
+  }) async {
+    try {
+      final uri = Uri.parse(
+        'https://marine-api.open-meteo.com/v1/marine'
+        '?latitude=$lat&longitude=$lng'
+        '&current=wave_height,wave_direction,wave_period,sea_surface_temperature'
+        '&timezone=Africa%2FTunis',
+      );
+      final res = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) return null;
+      final j = jsonDecode(res.body) as Map<String, dynamic>;
+      final cur = j['current'] as Map<String, dynamic>?;
+      if (cur == null) return null;
+      return MarineData(
+        waveHeight:   (cur['wave_height']    as num?)?.toDouble(),
+        wavePeriod:   (cur['wave_period']    as num?)?.toDouble(),
+        waveDir:      (cur['wave_direction'] as num?)?.toDouble(),
+        seaSurfTemp:  (cur['sea_surface_temperature'] as num?)?.toDouble(),
       );
     } catch (_) {
       return null;

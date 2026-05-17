@@ -24,7 +24,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailCtrl   = TextEditingController();
   final _passCtrl    = TextEditingController();
   final _confirmCtrl = TextEditingController();
-  String? _loadingSocial; // 'google' | 'apple' | null
   bool _loadingEmail = false;
   String? _errorMsg;
 
@@ -51,8 +50,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submit() async {
     if (_loadingEmail) return;
-    setState(() { _loadingEmail = true; _errorMsg = null; });
     final lang = localeNotifier.value.languageCode;
+    final fr = lang == 'fr';
+
+    if (!_isLogin) {
+      if (_passCtrl.text != _confirmCtrl.text) {
+        setState(() => _errorMsg = fr
+            ? 'Les mots de passe ne correspondent pas'
+            : 'Passwords do not match');
+        return;
+      }
+    }
+
+    setState(() { _loadingEmail = true; _errorMsg = null; });
     final result = _isLogin
         ? await AuthService.login(_emailCtrl.text.trim(), _passCtrl.text)
         : await AuthService.register(
@@ -65,10 +75,17 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _signInWith(String provider) async {
-    // Social sign-in not available without Firebase Auth
-    // Show a friendly message instead
-    setState(() => _errorMsg = 'Utilisez email + mot de passe pour vous connecter.');
+  void _showForgotSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: palette(context).bg,
+      shape: const RoundedRectangleBorder(),
+      isScrollControlled: true,
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: _ForgotSheet(),
+      ),
+    );
   }
 
   void _showLanguagePicker() {
@@ -135,7 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 10),
                     Text(
                       _isLogin ? s.loginSubtitle : s.registerSubtitle,
-                      style: CType.body(size: 13, color: CColors.inkSoft),
+                      style: CType.body(size: 13, color: palette(context).inkSoft),
                     ),
                   ],
                 ),
@@ -205,7 +222,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: GestureDetector(
-                          onTap: () {},
+                          onTap: () => _showForgotSheet(context),
                           child: Text(
                             s.forgotPassword,
                             style: CType.body(size: 12, color: CColors.tealDark),
@@ -252,37 +269,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        const Expanded(child: HairLine(color: CColors.tealLine)),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          child: Eyebrow(s.orDivider,
-                              size: 9, tracking: 0.28, color: CColors.grey),
-                        ),
-                        const Expanded(child: HairLine(color: CColors.tealLine)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _SocialBtn(
-                      label: s.continueGoogle,
-                      loading: _loadingSocial == 'google',
-                      onTap: () => _signInWith('google'),
-                    ),
-                    const SizedBox(height: 10),
-                    _SocialBtn(
-                      label: s.continueApple,
-                      loading: _loadingSocial == 'apple',
-                      onTap: () => _signInWith('apple'),
-                    ),
-                    const SizedBox(height: 24),
                     Center(
                       child: GestureDetector(
                         onTap: () => setState(
                             () => _mode = _isLogin ? 'register' : 'login'),
                         child: Text.rich(
                           TextSpan(
-                            style: CType.body(size: 13, color: CColors.inkSoft),
+                            style: CType.body(size: 13, color: palette(context).inkSoft),
                             children: [
                               TextSpan(
                                 text: _isLogin ? s.noAccount : s.alreadyMember,
@@ -333,7 +326,7 @@ class _LanguageSheet extends StatelessWidget {
           child: Row(
             children: [
               Text(title,
-                  style: CType.serifDisplay(size: 20, color: CColors.ink)),
+                  style: CType.serifDisplay(size: 20, color: palette(context).ink)),
               const Spacer(),
               GestureDetector(
                 onTap: () => Navigator.pop(context),
@@ -423,37 +416,174 @@ class _TabBtn extends StatelessWidget {
   }
 }
 
-// ── Social button ─────────────────────────────────────────────────────────────
+// ── Forgot password sheet (2-step: email → OTP + new password) ───────────────
 
-class _SocialBtn extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  final bool loading;
+class _ForgotSheet extends StatefulWidget {
+  @override
+  State<_ForgotSheet> createState() => _ForgotSheetState();
+}
 
-  const _SocialBtn({required this.label, required this.onTap, this.loading = false});
+class _ForgotSheetState extends State<_ForgotSheet> {
+  final _emailCtrl = TextEditingController();
+  final _otpCtrl   = TextEditingController();
+  final _passCtrl  = TextEditingController();
+  int     _step    = 1;
+  bool    _loading = false;
+  String? _error;
+  String  _emailSent = '';
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _otpCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendOtp() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) return;
+    setState(() { _loading = true; _error = null; });
+    final result = await AuthService.forgotPassword(email);
+    if (!mounted) return;
+    if (result == ForgotResult.ok) {
+      _emailSent = email;
+      setState(() { _loading = false; _step = 2; });
+    } else {
+      setState(() {
+        _loading = false;
+        _error = result == ForgotResult.networkError
+            ? 'Impossible de joindre le serveur'
+            : 'Une erreur est survenue';
+      });
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    final otp  = _otpCtrl.text.trim();
+    final pass = _passCtrl.text;
+    if (otp.isEmpty || pass.isEmpty) return;
+    setState(() { _loading = true; _error = null; });
+    final lang   = localeNotifier.value.languageCode;
+    final result = await AuthService.resetPassword(_emailSent, otp, pass);
+    if (!mounted) return;
+    if (result == ResetResult.ok) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Mot de passe réinitialisé — connectez-vous',
+            style: CType.body(size: 13, color: Colors.white)),
+        backgroundColor: CColors.tealDark,
+        behavior: SnackBarBehavior.floating,
+      ));
+    } else {
+      setState(() { _loading = false; _error = result.message(lang); });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: loading ? null : onTap,
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: CColors.white,
-          border: Border.all(color: CColors.tealLine, width: 1),
+    final p = palette(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 18),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+          child: Row(
+            children: [
+              Text(
+                _step == 1 ? 'Mot de passe oublié' : 'Nouveau mot de passe',
+                style: CType.serifDisplay(size: 22, color: p.ink),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: const Icon(LucideIcons.x, size: 18, color: CColors.grey),
+              ),
+            ],
+          ),
         ),
-        alignment: Alignment.center,
-        child: loading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(CColors.tealDark),
-                ),
-              )
-            : Text(label, style: CType.body(size: 13, color: CColors.ink)),
-      ),
+        const HairLine(color: CColors.tealLine),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 0),
+          child: _step == 1 ? _buildStep1(p) : _buildStep2(p),
+        ),
+        const SizedBox(height: 32),
+      ],
     );
   }
+
+  Widget _buildStep1(CoastPalette p) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text('Entrez votre adresse email — nous vous enverrons un code de vérification.',
+          style: CType.body(size: 13, color: p.inkSoft)),
+      const SizedBox(height: 18),
+      CustomTextField(
+        label: 'Email', hint: 'vous@email.com',
+        controller: _emailCtrl, keyboardType: TextInputType.emailAddress,
+      ),
+      if (_error != null) ...[
+        const SizedBox(height: 12),
+        Text(_error!, style: CType.body(size: 12, color: CColors.redInk)),
+      ],
+      const SizedBox(height: 20),
+      GestureDetector(
+        onTap: _loading ? null : _sendOtp,
+        child: Container(
+          height: 52, color: CColors.tealDark, alignment: Alignment.center,
+          child: _loading
+              ? const SizedBox(width: 18, height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
+              : Text('Envoyer le code',
+                  style: CType.eyebrow(size: 11, tracking: 0.22, color: Colors.white)),
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildStep2(CoastPalette p) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text('Entrez le code reçu par email et choisissez un nouveau mot de passe.',
+          style: CType.body(size: 13, color: p.inkSoft)),
+      const SizedBox(height: 18),
+      CustomTextField(
+        label: 'Code de vérification', hint: '123456',
+        controller: _otpCtrl, keyboardType: TextInputType.number,
+      ),
+      const SizedBox(height: 14),
+      CustomTextField(
+        label: 'Nouveau mot de passe', hint: '••••••••',
+        controller: _passCtrl, isPassword: true,
+      ),
+      if (_error != null) ...[
+        const SizedBox(height: 12),
+        Text(_error!, style: CType.body(size: 12, color: CColors.redInk)),
+      ],
+      const SizedBox(height: 20),
+      GestureDetector(
+        onTap: _loading ? null : _resetPassword,
+        child: Container(
+          height: 52, color: CColors.tealDark, alignment: Alignment.center,
+          child: _loading
+              ? const SizedBox(width: 18, height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
+              : Text('Confirmer',
+                  style: CType.eyebrow(size: 11, tracking: 0.22, color: Colors.white)),
+        ),
+      ),
+      const SizedBox(height: 12),
+      GestureDetector(
+        onTap: _loading ? null : () => setState(() { _step = 1; _error = null; }),
+        child: Center(
+          child: Text('Renvoyer un code',
+              style: CType.body(size: 12, color: CColors.tealDark)),
+        ),
+      ),
+    ],
+  );
 }

@@ -43,6 +43,8 @@ class _MapScreenState extends State<MapScreen> {
   bool _locating = false;
   List<Beach> _results = [];
   List<Beach> _beaches = mockBeaches;
+  bool _showHeatmap = false;
+  List<LatLng> _reportPoints = const [];
 
   @override
   void initState() {
@@ -51,12 +53,24 @@ class _MapScreenState extends State<MapScreen> {
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _locateMe(center: false));
     _loadBeaches();
+    _loadReports();
   }
 
   Future<void> _loadBeaches() async {
     try {
       final beaches = await ApiService.getBeaches();
       if (mounted) setState(() => _beaches = beaches);
+    } catch (_) {}
+  }
+
+  Future<void> _loadReports() async {
+    try {
+      final reports = await ApiService.getReports();
+      final pts = reports
+          .where((r) => r.lat != null && r.lng != null)
+          .map((r) => LatLng(r.lat!, r.lng!))
+          .toList();
+      if (mounted) setState(() => _reportPoints = pts);
     } catch (_) {}
   }
 
@@ -188,6 +202,20 @@ class _MapScreenState extends State<MapScreen> {
                         source: Text('© MapTiler © OpenStreetMap',
                             style: TextStyle(fontSize: 9)),
                       ),
+                      if (_showHeatmap)
+                        CircleLayer(
+                          circles: [
+                            for (final pt in _reportPoints)
+                              CircleMarker(
+                                point: pt,
+                                radius: 22,
+                                useRadiusInMeter: false,
+                                color: const Color(0xFFFF5252).withValues(alpha: 0.28),
+                                borderColor: const Color(0xFFFF5252).withValues(alpha: 0.5),
+                                borderStrokeWidth: 1,
+                              ),
+                          ],
+                        ),
                       MarkerLayer(
                         markers: [
                           for (final b in _beaches)
@@ -286,7 +314,7 @@ class _MapScreenState extends State<MapScreen> {
                         width: 42,
                         height: 42,
                         decoration: BoxDecoration(
-                          color: CColors.white,
+                          color: palette(context).surface,
                           border:
                               Border.all(color: CColors.tealLine, width: 1),
                           boxShadow: CShadows.mapInfoCard,
@@ -305,6 +333,29 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ),
                   ),
+                Positioned(
+                  right: 16,
+                  bottom: 216,
+                  child: GestureDetector(
+                    onTap: () => setState(() => _showHeatmap = !_showHeatmap),
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: _showHeatmap
+                            ? CColors.tealDark
+                            : palette(context).surface,
+                        border: Border.all(color: CColors.tealLine, width: 1),
+                        boxShadow: CShadows.mapInfoCard,
+                      ),
+                      child: Icon(
+                        LucideIcons.flame,
+                        size: 18,
+                        color: _showHeatmap ? Colors.white : CColors.tealDark,
+                      ),
+                    ),
+                  ),
+                ),
 
                 // ── Legend strip — only when a beach is selected ─────
                 if (_selected != null && !isSearching)
@@ -316,7 +367,7 @@ class _MapScreenState extends State<MapScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 11),
                       decoration: BoxDecoration(
-                        color: CColors.white,
+                        color: palette(context).surface,
                         border:
                             Border.all(color: CColors.tealLine, width: 1),
                       ),
@@ -388,7 +439,7 @@ class _MapHeader extends StatelessWidget {
                   height: 42,
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
-                    color: CColors.white,
+                    color: palette(context).surface,
                     border:
                         Border.all(color: CColors.tealLine, width: 1),
                   ),
@@ -402,7 +453,7 @@ class _MapHeader extends StatelessWidget {
                           controller: searchCtrl,
                           focusNode: searchFocus,
                           style:
-                              CType.body(size: 13, color: CColors.ink),
+                              CType.body(size: 13, color: palette(context).ink),
                           decoration: InputDecoration(
                             hintText: AppStrings.current.searchHint,
                             hintStyle: CType.body(
@@ -439,7 +490,7 @@ class _MapHeader extends StatelessWidget {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: CColors.white,
+                    color: palette(context).surface,
                     border:
                         Border.all(color: CColors.tealLine, width: 1),
                   ),
@@ -471,7 +522,7 @@ void _showMapFilter(BuildContext context) {
           padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
           child: Row(
             children: [
-              Text(s.mapFilterTitle, style: CType.serifDisplay(size: 22, color: CColors.ink)),
+              Text(s.mapFilterTitle, style: CType.serifDisplay(size: 22, color: palette(context).ink)),
               const Spacer(),
               GestureDetector(
                 onTap: () => Navigator.pop(context),
@@ -686,7 +737,7 @@ class _MapInfoCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: CColors.white,
+        color: palette(context).surface,
         border: Border.all(color: CColors.tealLine, width: 1),
         boxShadow: CShadows.mapInfoCard,
       ),
@@ -734,7 +785,7 @@ class _MapInfoCard extends StatelessWidget {
               Text(AppStrings.current.riskLabel(beach.risk),
                   style: CType.serifDisplay(
                       size: 12,
-                      color: CColors.inkSoft,
+                      color: palette(context).inkSoft,
                       italic: true)),
             ],
           ),
@@ -795,7 +846,7 @@ class _LegendItem extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 7),
-        Eyebrow(label, size: 9, tracking: 0.20, color: CColors.ink),
+        Eyebrow(label, size: 9, tracking: 0.20, color: palette(context).ink),
       ],
     );
   }

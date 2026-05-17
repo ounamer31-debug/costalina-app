@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
-import '../data/mock_beaches.dart';
 import '../l10n/app_strings.dart';
 import '../models/alerte.dart';
 import '../models/beach.dart';
@@ -26,6 +25,7 @@ class AlertesScreen extends StatefulWidget {
 class _AlertesScreenState extends State<AlertesScreen> {
   List<Alerte> _alerts = [];
   bool _loading = true;
+  bool _failed = false;
 
   @override
   void initState() {
@@ -34,11 +34,16 @@ class _AlertesScreenState extends State<AlertesScreen> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() { _loading = true; _failed = false; });
     try {
       final alerts = await ApiService.getAlerts();
-      if (mounted) setState(() { _alerts = alerts; _loading = false; });
+      if (!mounted) return;
+      setState(() { _alerts = alerts; _loading = false; });
+      // Mark every alert as read for the current user once the list is shown.
+      // Fire-and-forget so the UI never waits on it.
+      ApiService.markAllAlertsRead();
     } catch (_) {
-      if (mounted) setState(() { _alerts = mockAlertes; _loading = false; });
+      if (mounted) setState(() { _loading = false; _failed = true; });
     }
   }
 
@@ -72,6 +77,29 @@ class _AlertesScreenState extends State<AlertesScreen> {
                 child: Center(
                   child: SizedBox(width: 20, height: 20,
                     child: CircularProgressIndicator(color: CColors.tealDark, strokeWidth: 2)),
+                ),
+              )
+            else if (_failed)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 30, 22, 30),
+                child: Column(
+                  children: [
+                    const Icon(LucideIcons.wifiOff, size: 32, color: CColors.grey),
+                    const SizedBox(height: 12),
+                    Text('Impossible de charger les alertes',
+                        style: CType.body(size: 13, color: p.inkSoft),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: _load,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                        color: CColors.tealDark,
+                        child: Text('Réessayer',
+                            style: CType.eyebrow(size: 10, tracking: 0.22, color: Colors.white)),
+                      ),
+                    ),
+                  ],
                 ),
               )
             else
@@ -132,7 +160,7 @@ void _showSettings(BuildContext context) {
           child: Row(
             children: [
               Text(AppStrings.current.profilSettings,
-                  style: CType.serifDisplay(size: 22, color: CColors.ink)),
+                  style: CType.serifDisplay(size: 22, color: palette(context).ink)),
               const Spacer(),
               GestureDetector(
                 onTap: () => Navigator.pop(context),
@@ -142,8 +170,6 @@ void _showSettings(BuildContext context) {
           ),
         ),
         const HairLine(color: CColors.tealLine),
-        _SettingsRow(icon: LucideIcons.bell, label: AppStrings.current.profilNotifications),
-        const HairLine(color: CColors.tealLineSoft),
         _SettingsRow(icon: LucideIcons.globe, label: AppStrings.current.chooseLanguage,
             onTap: () { Navigator.pop(context); showLangPicker(context); }),
         const SizedBox(height: 32),
@@ -179,24 +205,48 @@ class _SettingsRow extends StatelessWidget {
   }
 }
 
-class _AlerteRow extends StatelessWidget {
+class _AlerteRow extends StatefulWidget {
   final Alerte alerte;
   final bool first;
 
   const _AlerteRow({required this.alerte, this.first = false});
 
   @override
+  State<_AlerteRow> createState() => _AlerteRowState();
+}
+
+class _AlerteRowState extends State<_AlerteRow> {
+  bool _navigating = false;
+
+  Future<void> _openBeach(BuildContext context, Alerte alerte) async {
+    if (_navigating) return;
+    setState(() => _navigating = true);
+    try {
+      final beach = await ApiService.getBeach(alerte.beachId);
+      if (!context.mounted) return;
+      Navigator.push(context, MaterialPageRoute(builder: (_) => BeachDetailScreen(beach: beach)));
+    } catch (_) {
+      // Beach not found in API — fall back to a minimal stub so we never crash
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Plage introuvable', style: CType.body(size: 13, color: Colors.white)),
+        backgroundColor: CColors.tealDark,
+        behavior: SnackBarBehavior.floating,
+      ));
+    } finally {
+      if (mounted) setState(() => _navigating = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final alerte = widget.alerte;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (!first) const HairLine(color: CColors.tealLineSoft),
+        if (!widget.first) const HairLine(color: CColors.tealLineSoft),
         GestureDetector(
-          onTap: () {
-            final beach = mockBeaches.firstWhere((b) => b.id == alerte.beachId);
-            Navigator.push(context,
-                MaterialPageRoute(builder: (_) => BeachDetailScreen(beach: beach)));
-          },
+          onTap: () => _openBeach(context, alerte),
           behavior: HitTestBehavior.opaque,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
@@ -226,13 +276,19 @@ class _AlerteRow extends StatelessWidget {
                             child: Text(alerte.beachName,
                                 style: CType.serifDisplay(size: 17)),
                           ),
+                          if (!alerte.read) ...[
+                            const SizedBox(width: 8),
+                            Container(width: 7, height: 7,
+                                decoration: const BoxDecoration(
+                                    color: CColors.tealDark, shape: BoxShape.circle)),
+                          ],
                           const SizedBox(width: 10),
                           Eyebrow(alerte.time, size: 9, tracking: 0.18, color: CColors.grey),
                         ],
                       ),
                       const SizedBox(height: 6),
                       Text(alerte.message,
-                          style: CType.body(size: 12, color: CColors.inkSoft)),
+                          style: CType.body(size: 12, color: palette(context).inkSoft)),
                       const SizedBox(height: 8),
                       RiskTag(alerte.risk, size: RiskTagSize.sm),
                     ],

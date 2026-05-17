@@ -1,6 +1,13 @@
 # Environment secrets — never commit
 .env
 
+# User-uploaded files (served from backend; data lives in MongoDB)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Node
+node_modules/
+
 # Miscellaneous
 *.class
 *.log

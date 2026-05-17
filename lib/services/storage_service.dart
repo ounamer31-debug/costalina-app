@@ -2,7 +2,10 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 
-const _base = 'http://localhost:3000/api';
+const _base = String.fromEnvironment(
+  'API_BASE',
+  defaultValue: 'http://localhost:3000/api',
+);
 
 class UploadResult {
   final String? downloadUrl;
@@ -28,14 +31,15 @@ class StorageService {
       final stream = await req.send();
       onProgress?.call(1.0); // multipart doesn't expose per-byte progress easily
 
+      final body = await stream.stream.bytesToString();
       if (stream.statusCode == 201) {
-        final body = await stream.stream.bytesToString();
         // extract url from {"url":"..."}
         final match = RegExp(r'"url"\s*:\s*"([^"]+)"').firstMatch(body);
         final url = match?.group(1);
         if (url != null) return UploadResult(downloadUrl: url);
+        return UploadResult(error: 'No URL in response: $body');
       }
-      return const UploadResult(error: 'Upload failed');
+      return UploadResult(error: 'HTTP ${stream.statusCode}: $body');
     } catch (e) {
       return UploadResult(error: e.toString());
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/costalina_logo.dart';
+import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -51,7 +52,14 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 1400));
     if (!mounted) return;
     final loggedIn = await AuthService.restoreSession();
-    if (mounted) Navigator.pushReplacementNamed(context, loggedIn ? '/app' : '/login');
+    if (loggedIn) {
+      if (mounted) Navigator.pushReplacementNamed(context, '/app');
+      return;
+    }
+    final hasSeen = await OnboardingScreen.hasSeen();
+    if (mounted) {
+      Navigator.pushReplacementNamed(context, hasSeen ? '/login' : '/onboarding');
+    }
   }
 
   @override
@@ -113,7 +121,7 @@ class _SplashScreenState extends State<SplashScreen>
                     opacity: _logo.value.clamp(0.0, 1.0),
                     child: Transform.scale(
                       scale: 0.4 + 0.6 * t,
-                      child: const CostalinaLogo(size: 180),
+                      child: CostalinaLogo(size: 180, bgColor: CColors.sand),
                     ),
                   );
                 },

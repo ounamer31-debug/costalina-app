@@ -29,7 +29,7 @@ void showLangPicker(BuildContext context) {
   final s = AppStrings.current;
   showModalBottomSheet(
     context: context,
-    backgroundColor: CColors.sand,
+    backgroundColor: palette(context).bg,
     shape: const RoundedRectangleBorder(),
     builder: (_) => _LangSheet(title: s.chooseLanguage),
   );
@@ -49,7 +49,7 @@ class _LangSheet extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(22, 0, 22, 16),
           child: Row(
             children: [
-              Text(title, style: CType.serifDisplay(size: 20, color: CColors.ink)),
+              Text(title, style: CType.serifDisplay(size: 20, color: palette(context).ink)),
               const Spacer(),
               GestureDetector(
                 onTap: () => Navigator.pop(context),

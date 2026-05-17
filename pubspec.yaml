@@ -19,7 +19,6 @@ dependencies:
   lucide_icons: ^0.257.0
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
-  flutter_map_marker_popup: ^7.0.0
   fl_chart: ^0.69.0
   cached_network_image: ^3.4.1
   flutter_animate: ^4.5.0
@@ -32,10 +31,20 @@ dependencies:
   # Auth token storage
   flutter_secure_storage: ^9.2.2
 
+  # Offline cache
+  shared_preferences: ^2.3.3
+
+  # Native share sheet
+  share_plus: ^10.1.2
+
+  # Connectivity (auto-flush offline queue on reconnect)
+  connectivity_plus: ^6.0.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
   uses-material-design: true
@@ -43,3 +52,9 @@ flutter:
   assets:
     - assets/brand/costalina-logo.jpg
     - assets/brand/costalina-mark.svg
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/brand/costalina-logo.jpg"
+  min_sdk_android: 21

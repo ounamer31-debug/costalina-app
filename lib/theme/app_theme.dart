@@ -148,7 +148,7 @@ typedef ShimPalette = CoastPalette;
 class CType {
   static TextStyle serifDisplay({
     double size = 30,
-    Color color = CColors.ink,
+    Color? color,
     bool italic = false,
   }) =>
       GoogleFonts.cormorantGaramond(
@@ -162,7 +162,7 @@ class CType {
 
   static TextStyle body({
     double size = 13,
-    Color color = CColors.inkSoft,
+    Color? color,
     FontWeight w = FontWeight.w300,
   }) =>
       GoogleFonts.jost(
