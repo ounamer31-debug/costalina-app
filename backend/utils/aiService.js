@@ -44,14 +44,16 @@ Analyse l'image et réponds UNIQUEMENT par un objet JSON avec ces champs:
 - "severity": un entier de 1 à 5 (1 = bénin, 5 = critique)
 - "description": une phrase courte en français (max 120 caractères) décrivant ce que tu vois
 - "confidence": "low" | "medium" | "high"
+- "usable": true si la photo est exploitable pour un signalement (montre clairement la plage ou le problème, nette, bien cadrée), false sinon
+- "qualityIssue": si usable=false, une phrase courte en français expliquant pourquoi (ex: "Photo floue", "Selfie", "Intérieur", "Trop sombre"). Sinon, chaîne vide.
 
 Règles:
 - Si la photo montre des déchets, du plastique, une marée noire → type="pollution"
 - Si la photo montre du recul de plage, une falaise effondrée, du sable manquant → type="erosion"
 - Si la photo montre un animal blessé ou en détresse → type="wildlife"
 - Si la photo montre un escalier cassé, une rampe, du béton endommagé → type="infrastructure"
-- Si c'est juste une belle photo de plage → type="photo", severity=1
-- Si rien de pertinent (selfie, intérieur, etc.) → type="other", severity=1, confidence="low"
+- Si c'est juste une belle photo de plage → type="photo", severity=1, usable=true
+- Si selfie, intérieur, photo floue ou hors-sujet → type="other", usable=false, qualityIssue rempli
 
 Réponds en JSON uniquement, pas de texte avant ou après.`;
 
@@ -64,11 +66,45 @@ Réponds en JSON uniquement, pas de texte avant ou après.`;
   if (!json) throw new Error('ai_parse_failed');
 
   return {
-    type:        ['erosion','pollution','wildlife','infrastructure','photo','other'].includes(json.type) ? json.type : 'other',
-    severity:    Math.max(1, Math.min(5, parseInt(json.severity) || 3)),
-    description: String(json.description || '').slice(0, 200),
-    confidence:  ['low','medium','high'].includes(json.confidence) ? json.confidence : 'medium',
+    type:         ['erosion','pollution','wildlife','infrastructure','photo','other'].includes(json.type) ? json.type : 'other',
+    severity:     Math.max(1, Math.min(5, parseInt(json.severity) || 3)),
+    description:  String(json.description || '').slice(0, 200),
+    confidence:   ['low','medium','high'].includes(json.confidence) ? json.confidence : 'medium',
+    usable:       json.usable !== false,
+    qualityIssue: String(json.qualityIssue || '').slice(0, 120),
   };
+}
+
+// ── 5. Improve user-written message ─────────────────────────────────────────
+
+async function improveMessage(text, lang = 'fr') {
+  const prompt = `Tu reformules un message court écrit par un citoyen qui signale un problème sur une plage tunisienne.
+Garde le sens d'origine, mais rends-le plus clair, professionnel et précis pour qu'un modérateur le comprenne vite.
+Ne rajoute pas d'informations inventées. Maximum 2 phrases.
+Langue de sortie: ${lang}.
+
+Message original:
+"""${text}"""
+
+Réponds UNIQUEMENT par le message reformulé, sans guillemets ni préfixe.`;
+
+  const result = await client().generateContent(prompt);
+  return { text: result.response.text().trim().slice(0, 500) };
+}
+
+// ── 6. Weekly national digest ───────────────────────────────────────────────
+
+async function weeklyDigest(stats) {
+  const prompt = `Tu rédiges un bref bulletin hebdomadaire pour les utilisateurs d'une application de surveillance du littoral tunisien.
+Voici les statistiques des 7 derniers jours:
+${JSON.stringify(stats, null, 2)}
+
+Rédige UNIQUEMENT un texte de 2-3 phrases en français, ton informatif et encourageant.
+Mentionne 1-2 chiffres saillants, la plage la plus active si pertinente, et termine sur une note positive ou un appel à l'action.
+Ne mets pas de titre, pas de puces, juste le paragraphe.`;
+
+  const result = await client().generateContent(prompt);
+  return { text: result.response.text().trim().slice(0, 600) };
 }
 
 // ── 2. Smart triage (called fire-and-forget after report creation) ──────────
@@ -169,4 +205,4 @@ Réponds UNIQUEMENT par un objet JSON:
   };
 }
 
-module.exports = { analyzePhoto, scoreReport, chat, forecastBeach };
+module.exports = { analyzePhoto, scoreReport, chat, forecastBeach, improveMessage, weeklyDigest };

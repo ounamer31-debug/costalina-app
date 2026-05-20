@@ -55,4 +55,72 @@ router.get('/forecast/:beachId', async (req, res) => {
   }
 });
 
+// POST /api/ai/improve-message  { text, lang? }
+router.post('/improve-message', auth, async (req, res) => {
+  const text = String(req.body.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'text required' });
+  if (text.length > 1000) return res.status(400).json({ error: 'too_long' });
+  try {
+    const result = await ai.improveMessage(text, req.body.lang || 'fr');
+    res.json(result);
+  } catch (err) {
+    console.error('improveMessage:', err.message);
+    res.status(err.status || 502).json({ error: err.message });
+  }
+});
+
+// GET /api/ai/weekly-digest — public, cached in-memory for 1h
+let _digestCache = { at: 0, payload: null };
+const DIGEST_TTL = 60 * 60 * 1000;
+router.get('/weekly-digest', async (req, res) => {
+  if (_digestCache.payload && Date.now() - _digestCache.at < DIGEST_TTL) {
+    return res.json(_digestCache.payload);
+  }
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const reports = await Report.find({ createdAt: { $gte: since } })
+      .select('type status beachId')
+      .lean();
+
+    const stats = {
+      total:    reports.length,
+      byType:   {},
+      byStatus: {},
+      topBeaches: {},
+    };
+    for (const r of reports) {
+      stats.byType[r.type]     = (stats.byType[r.type] || 0) + 1;
+      stats.byStatus[r.status] = (stats.byStatus[r.status] || 0) + 1;
+      stats.topBeaches[r.beachId] = (stats.topBeaches[r.beachId] || 0) + 1;
+    }
+    // Convert topBeaches to a sorted top-3 with names
+    const beachIds = Object.entries(stats.topBeaches)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([id]) => id);
+    const beaches = await Beach.find({ id: { $in: beachIds } }).select('id name').lean();
+    stats.topBeaches = beachIds.map(id => {
+      const b = beaches.find(x => x.id === id);
+      return { id, name: b?.name || id, count: stats.topBeaches[id] };
+    });
+
+    if (stats.total === 0) {
+      const payload = {
+        text: "Aucun signalement cette semaine. Sois le premier à contribuer !",
+        stats,
+      };
+      _digestCache = { at: Date.now(), payload };
+      return res.json(payload);
+    }
+
+    const result = await ai.weeklyDigest(stats);
+    const payload = { text: result.text, stats };
+    _digestCache = { at: Date.now(), payload };
+    res.json(payload);
+  } catch (err) {
+    console.error('weekly-digest:', err.message);
+    res.status(err.status || 502).json({ error: err.message });
+  }
+});
+
 module.exports = router;

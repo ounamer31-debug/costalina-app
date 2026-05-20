@@ -312,10 +312,12 @@ class ApiService {
       if (res.statusCode != 200) return null;
       final j = jsonDecode(res.body) as Map<String, dynamic>;
       return AiPhotoSuggestion(
-        type:        j['type']        as String? ?? 'other',
-        severity:    (j['severity']   as num?)?.toInt() ?? 3,
-        description: j['description'] as String? ?? '',
-        confidence:  j['confidence']  as String? ?? 'medium',
+        type:         j['type']         as String? ?? 'other',
+        severity:     (j['severity']    as num?)?.toInt() ?? 3,
+        description:  j['description']  as String? ?? '',
+        confidence:   j['confidence']   as String? ?? 'medium',
+        usable:       j['usable']       as bool?   ?? true,
+        qualityIssue: j['qualityIssue'] as String? ?? '',
       );
     } catch (_) {
       return null;
@@ -334,6 +336,39 @@ class ApiService {
       if (res.statusCode != 200) return null;
       final j = jsonDecode(res.body) as Map<String, dynamic>;
       return j['reply'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<String?> improveMessage(String text, {String lang = 'fr'}) async {
+    final token = await AuthService.getToken();
+    if (token == null) return null;
+    try {
+      final res = await http.post(
+        Uri.parse('$_base/ai/improve-message'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'text': text, 'lang': lang}),
+      ).timeout(const Duration(seconds: 20));
+      if (res.statusCode != 200) return null;
+      final j = jsonDecode(res.body) as Map<String, dynamic>;
+      return j['text'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<AiDigest?> getWeeklyDigest() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$_base/ai/weekly-digest'),
+      ).timeout(const Duration(seconds: 25));
+      if (res.statusCode != 200) return null;
+      final j = jsonDecode(res.body) as Map<String, dynamic>;
+      return AiDigest(
+        text:  j['text'] as String? ?? '',
+        total: ((j['stats'] as Map?)?['total'] as num?)?.toInt() ?? 0,
+      );
     } catch (_) {
       return null;
     }
@@ -448,12 +483,22 @@ class AiPhotoSuggestion {
   final int severity;
   final String description;
   final String confidence;
+  final bool usable;
+  final String qualityIssue;
   const AiPhotoSuggestion({
     required this.type,
     required this.severity,
     required this.description,
     required this.confidence,
+    this.usable = true,
+    this.qualityIssue = '',
   });
+}
+
+class AiDigest {
+  final String text;
+  final int total;
+  const AiDigest({required this.text, required this.total});
 }
 
 class AiForecast {

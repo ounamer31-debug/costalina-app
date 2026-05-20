@@ -40,6 +40,9 @@ dependencies:
   # Connectivity (auto-flush offline queue on reconnect)
   connectivity_plus: ^6.0.5
 
+  # Voice-to-text for dictating report messages
+  speech_to_text: ^7.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

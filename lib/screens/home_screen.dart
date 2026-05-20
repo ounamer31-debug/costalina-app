@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../data/mock_beaches.dart';
 import '../l10n/app_strings.dart';
 import '../main.dart' show tabNotifier;
@@ -112,6 +113,10 @@ class _HomeScreenState extends State<HomeScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 22),
               child: _HeroCard(beach: featured),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(22, 18, 22, 0),
+              child: _WeeklyDigestCard(),
             ),
             const WeatherCard(),
             // Stat strip
@@ -645,9 +650,14 @@ class _ReportSheetState extends State<_ReportSheet> {
   bool _uploading = false;
   bool _loading   = false;
   bool _aiLoading = false;
+  bool _improving = false;
   AiPhotoSuggestion? _aiSuggestion;
   double? _lat, _lng;
   Beach? _selectedBeach;
+
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechReady = false;
+  bool _listening = false;
 
   @override
   void initState() {
@@ -709,6 +719,64 @@ class _ReportSheetState extends State<_ReportSheet> {
       _severity = s.severity;
       if (_ctrl.text.trim().isEmpty) _ctrl.text = s.description;
       _aiSuggestion = null;
+    });
+  }
+
+  Future<void> _toggleMic() async {
+    if (_listening) {
+      await _speech.stop();
+      if (mounted) setState(() => _listening = false);
+      return;
+    }
+    if (!_speechReady) {
+      _speechReady = await _speech.initialize(
+        onStatus: (s) {
+          if (s == 'done' || s == 'notListening') {
+            if (mounted) setState(() => _listening = false);
+          }
+        },
+        onError: (_) { if (mounted) setState(() => _listening = false); },
+      );
+    }
+    if (!_speechReady) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Micro indisponible — vérifie les permissions',
+            style: CType.body(size: 12, color: Colors.white)),
+        backgroundColor: CColors.amberInk,
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+    final base = _ctrl.text.trim();
+    setState(() => _listening = true);
+    await _speech.listen(
+      listenOptions: stt.SpeechListenOptions(
+        cancelOnError: true,
+        partialResults: true,
+        listenMode: stt.ListenMode.dictation,
+        localeId: 'fr_FR',
+      ),
+      onResult: (r) {
+        final spoken = r.recognizedWords;
+        if (!mounted) return;
+        setState(() {
+          _ctrl.text = base.isEmpty ? spoken : '$base $spoken';
+          _ctrl.selection = TextSelection.collapsed(offset: _ctrl.text.length);
+        });
+      },
+    );
+  }
+
+  Future<void> _improveMessage() async {
+    final txt = _ctrl.text.trim();
+    if (txt.length < 3 || _improving) return;
+    setState(() => _improving = true);
+    final better = await ApiService.improveMessage(txt);
+    if (!mounted) return;
+    setState(() {
+      _improving = false;
+      if (better != null && better.isNotEmpty) _ctrl.text = better;
     });
   }
 
@@ -842,23 +910,77 @@ class _ReportSheetState extends State<_ReportSheet> {
             ],
           ),
           const SizedBox(height: 20),
-          Eyebrow('DESCRIPTION', size: 9, tracking: 0.24),
+          Row(
+            children: [
+              Eyebrow('DESCRIPTION', size: 9, tracking: 0.24),
+              const Spacer(),
+              if (_ctrl.text.trim().length >= 3)
+                GestureDetector(
+                  onTap: _improving ? null : _improveMessage,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: CColors.tealBg,
+                      border: Border.all(color: CColors.tealLine),
+                    ),
+                    child: _improving
+                        ? const SizedBox(width: 12, height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: CColors.tealDark))
+                        : Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(LucideIcons.sparkles, size: 11, color: CColors.tealDark),
+                            const SizedBox(width: 5),
+                            Text('Améliorer',
+                                style: CType.eyebrow(size: 9, tracking: 0.22, color: CColors.tealDark)),
+                          ]),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 10),
           Container(
             decoration: BoxDecoration(
               color: p.surface,
-              border: Border.all(color: CColors.tealLine, width: 1),
+              border: Border.all(
+                  color: _listening ? CColors.tealDark : CColors.tealLine,
+                  width: _listening ? 1.5 : 1),
             ),
-            child: TextField(
-              controller: _ctrl,
-              maxLines: 3,
-              style: CType.body(size: 13, color: p.ink),
-              decoration: InputDecoration(
-                hintText: 'Décrivez ce que vous observez…',
-                hintStyle: CType.body(size: 13, color: CColors.grey),
-                contentPadding: const EdgeInsets.all(14),
-                border: InputBorder.none,
-              ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _ctrl,
+                    maxLines: 3,
+                    style: CType.body(size: 13, color: p.ink),
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: _listening
+                          ? 'Parlez…'
+                          : 'Décrivez ce que vous observez…',
+                      hintStyle: CType.body(size: 13, color: CColors.grey),
+                      contentPadding: const EdgeInsets.all(14),
+                      border: InputBorder.none,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8, top: 8),
+                  child: GestureDetector(
+                    onTap: _toggleMic,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      width: 34, height: 34,
+                      color: _listening ? CColors.tealDark : CColors.tealBg,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        _listening ? LucideIcons.mic : LucideIcons.mic,
+                        size: 16,
+                        color: _listening ? Colors.white : CColors.tealDark,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 20),
@@ -925,18 +1047,30 @@ class _ReportSheetState extends State<_ReportSheet> {
             Container(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
               decoration: BoxDecoration(
-                color: CColors.tealBg,
-                border: Border.all(color: CColors.tealDark, width: 1.2),
+                color: _aiSuggestion!.usable ? CColors.tealBg : CColors.amberBg,
+                border: Border.all(
+                  color: _aiSuggestion!.usable ? CColors.tealDark : CColors.amberInk,
+                  width: 1.2,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(LucideIcons.sparkles, size: 14, color: CColors.tealDark),
+                      Icon(
+                        _aiSuggestion!.usable ? LucideIcons.sparkles : LucideIcons.alertTriangle,
+                        size: 14,
+                        color: _aiSuggestion!.usable ? CColors.tealDark : CColors.amberInk,
+                      ),
                       const SizedBox(width: 8),
-                      Eyebrow('SUGGESTION DE L\'IA · ${_aiSuggestion!.confidence.toUpperCase()}',
-                          size: 9, tracking: 0.22, color: CColors.tealDark),
+                      Eyebrow(
+                        _aiSuggestion!.usable
+                            ? "SUGGESTION DE L'IA · ${_aiSuggestion!.confidence.toUpperCase()}"
+                            : 'PHOTO PEU UTILE',
+                        size: 9, tracking: 0.22,
+                        color: _aiSuggestion!.usable ? CColors.tealDark : CColors.amberInk,
+                      ),
                       const Spacer(),
                       GestureDetector(
                         onTap: () => setState(() => _aiSuggestion = null),
@@ -945,33 +1079,68 @@ class _ReportSheetState extends State<_ReportSheet> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    '${ReportTypeX.fromApi(_aiSuggestion!.type).label} · sévérité ${_aiSuggestion!.severity}/5',
-                    style: CType.serifDisplay(size: 15, color: CColors.tealDark),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(_aiSuggestion!.description,
-                      style: CType.body(size: 12, color: palette(context).inkSoft)),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: _acceptAiSuggestion,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          color: CColors.tealDark,
-                          child: Text('Accepter',
-                              style: CType.eyebrow(size: 10, tracking: 0.22, color: Colors.white)),
+                  if (_aiSuggestion!.usable) ...[
+                    Text(
+                      '${ReportTypeX.fromApi(_aiSuggestion!.type).label} · sévérité ${_aiSuggestion!.severity}/5',
+                      style: CType.serifDisplay(size: 15, color: CColors.tealDark),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(_aiSuggestion!.description,
+                        style: CType.body(size: 12, color: palette(context).inkSoft)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: _acceptAiSuggestion,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            color: CColors.tealDark,
+                            child: Text('Accepter',
+                                style: CType.eyebrow(size: 10, tracking: 0.22, color: Colors.white)),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      GestureDetector(
-                        onTap: () => setState(() => _aiSuggestion = null),
-                        child: Text('Ignorer',
-                            style: CType.body(size: 12, color: CColors.grey)),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 10),
+                        GestureDetector(
+                          onTap: () => setState(() => _aiSuggestion = null),
+                          child: Text('Ignorer',
+                              style: CType.body(size: 12, color: CColors.grey)),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    Text(
+                      _aiSuggestion!.qualityIssue.isEmpty
+                          ? "L'IA pense que cette photo n'est pas exploitable pour un signalement."
+                          : _aiSuggestion!.qualityIssue,
+                      style: CType.body(size: 12, color: palette(context).ink),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _photo = null;
+                              _photoUrl = null;
+                              _aiSuggestion = null;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            color: CColors.amberInk,
+                            child: Text('Reprendre la photo',
+                                style: CType.eyebrow(size: 10, tracking: 0.22, color: Colors.white)),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        GestureDetector(
+                          onTap: () => setState(() => _aiSuggestion = null),
+                          child: Text('Garder quand même',
+                              style: CType.body(size: 12, color: CColors.grey)),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1327,6 +1496,69 @@ class _RiskFilterChip extends StatelessWidget {
         child: Text(label,
             style: CType.body(size: 11,
                 color: selected ? Colors.white : p.ink, w: FontWeight.w500)),
+      ),
+    );
+  }
+}
+
+// ── Weekly AI digest card (national view) ────────────────────────────────────
+
+class _WeeklyDigestCard extends StatefulWidget {
+  const _WeeklyDigestCard();
+  @override
+  State<_WeeklyDigestCard> createState() => _WeeklyDigestCardState();
+}
+
+class _WeeklyDigestCardState extends State<_WeeklyDigestCard> {
+  AiDigest? _digest;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final d = await ApiService.getWeeklyDigest();
+    if (!mounted) return;
+    setState(() {
+      _digest = d;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const SizedBox.shrink();
+    final d = _digest;
+    if (d == null || d.text.isEmpty) return const SizedBox.shrink();
+    final p = palette(context);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: p.surface,
+        border: Border.all(color: CColors.tealLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.sparkles, size: 13, color: CColors.tealDark),
+              const SizedBox(width: 8),
+              Eyebrow('CETTE SEMAINE EN TUNISIE',
+                  size: 9, tracking: 0.24, color: CColors.tealDark),
+              const Spacer(),
+              if (d.total > 0)
+                Text('${d.total} signalements',
+                    style: CType.body(size: 11, color: p.inkSoft)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(d.text, style: CType.body(size: 13, color: p.ink)),
+        ],
       ),
     );
   }
