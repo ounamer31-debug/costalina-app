@@ -2,13 +2,18 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const MODEL = 'gemini-flash-latest';
 
-let _client = null;
-function client() {
+let _genAI = null;
+function genAI() {
   if (!process.env.GEMINI_API_KEY) {
     throw Object.assign(new Error('ai_disabled'), { expose: true, status: 503 });
   }
-  if (!_client) _client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  return _client.getGenerativeModel({ model: MODEL });
+  if (!_genAI) _genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  return _genAI;
+}
+function client(systemInstruction) {
+  return genAI().getGenerativeModel(
+    systemInstruction ? { model: MODEL, systemInstruction } : { model: MODEL }
+  );
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -104,16 +109,27 @@ Style: amical, concis (3 phrases max), tutoiement, français par défaut.
 Si on te demande quelque chose hors-sujet (politique, médical, etc.), redirige poliment vers le sujet de l'app.`;
 
 async function chat(messages, lang = 'fr') {
-  const history = messages.slice(0, -1).map(m => ({
+  // Gemini requires history to start with a 'user' message. The mobile app
+  // shows a hardcoded UI greeting as the first assistant message — strip any
+  // leading non-user entries before sending to the model.
+  const cleaned = [...messages];
+  while (cleaned.length > 0 && cleaned[0].role !== 'user') cleaned.shift();
+  if (cleaned.length === 0) {
+    throw Object.assign(new Error('no_user_message'), { expose: true, status: 400 });
+  }
+
+  const last = cleaned[cleaned.length - 1];
+  if (last.role !== 'user') {
+    throw Object.assign(new Error('last_must_be_user'), { expose: true, status: 400 });
+  }
+
+  const history = cleaned.slice(0, -1).map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: m.content }],
   }));
-  const last = messages[messages.length - 1];
 
-  const session = client().startChat({
-    history,
-    systemInstruction: { role: 'system', parts: [{ text: CHAT_SYSTEM + `\nLangue préférée: ${lang}.` }] },
-  });
+  const model = client(CHAT_SYSTEM + `\nLangue préférée: ${lang}.`);
+  const session = model.startChat({ history });
   const result = await session.sendMessage(last.content);
   return { reply: result.response.text().trim() };
 }
