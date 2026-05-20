@@ -303,6 +303,13 @@ class _ApercuTab extends StatelessWidget {
         ),
         const SizedBox(height: 30),
         SectionHead(
+          kicker: 'PRÉVISION IA',
+          title: 'Tendance ',
+          italic: 'estimée',
+        ),
+        _AiForecastCard(beachId: beach.id),
+        const SizedBox(height: 30),
+        SectionHead(
           kicker: 'MARÉE & MER',
           title: 'Conditions ',
           italic: 'maritimes',
@@ -1195,4 +1202,123 @@ class _FollowButtonState extends State<_FollowButton> {
       light: true,
     );
   }
+}
+
+// ── AI risk-forecast card ────────────────────────────────────────────────────
+
+class _AiForecastCard extends StatefulWidget {
+  final String beachId;
+  const _AiForecastCard({required this.beachId});
+
+  @override
+  State<_AiForecastCard> createState() => _AiForecastCardState();
+}
+
+class _AiForecastCardState extends State<_AiForecastCard> {
+  AiForecast? _forecast;
+  bool _loading = true;
+  bool _failed  = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (mounted) setState(() { _loading = true; _failed = false; });
+    final f = await ApiService.getBeachForecast(widget.beachId);
+    if (!mounted) return;
+    setState(() {
+      _forecast = f;
+      _loading = false;
+      _failed = f == null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      decoration: BoxDecoration(
+        color: p.surface,
+        border: Border.all(color: CColors.tealLine),
+      ),
+      child: _loading
+          ? Row(
+              children: [
+                const SizedBox(width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: CColors.tealDark)),
+                const SizedBox(width: 12),
+                Text("L'IA analyse les signalements récents…",
+                    style: CType.body(size: 12, color: p.inkSoft)),
+              ],
+            )
+          : _failed
+              ? Row(
+                  children: [
+                    const Icon(LucideIcons.wifiOff, size: 16, color: CColors.grey),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text('Prévision indisponible pour le moment.',
+                          style: CType.body(size: 12, color: p.inkSoft)),
+                    ),
+                    GestureDetector(
+                      onTap: _load,
+                      child: Text('Réessayer',
+                          style: CType.body(size: 12, color: CColors.tealDark)),
+                    ),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(LucideIcons.sparkles, size: 14, color: CColors.tealDark),
+                        const SizedBox(width: 8),
+                        Eyebrow(
+                          'PRÉVISION · CONFIANCE ${_forecast!.confidence.toUpperCase()}',
+                          size: 9, tracking: 0.22, color: CColors.tealDark,
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          color: _riskBg(_forecast!.risk),
+                          child: Text(
+                            _riskLabel(_forecast!.risk),
+                            style: CType.eyebrow(
+                              size: 9, tracking: 0.22,
+                              color: _riskInk(_forecast!.risk),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(_forecast!.summary,
+                        style: CType.body(size: 13, color: p.ink)),
+                  ],
+                ),
+    );
+  }
+
+  Color _riskBg(String r) => switch (r) {
+        'eleve'  => const Color(0xFFFCE7E0),
+        'modere' => const Color(0xFFFCEFD3),
+        _        => const Color(0xFFE6F4EF),
+      };
+
+  Color _riskInk(String r) => switch (r) {
+        'eleve'  => const Color(0xFFA8331E),
+        'modere' => const Color(0xFF8B5A12),
+        _        => const Color(0xFF1F6F5A),
+      };
+
+  String _riskLabel(String r) => switch (r) {
+        'eleve'  => 'RISQUE ÉLEVÉ',
+        'modere' => 'RISQUE MODÉRÉ',
+        _        => 'STABLE',
+      };
 }

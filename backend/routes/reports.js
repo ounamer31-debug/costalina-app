@@ -5,6 +5,7 @@ const User               = require('../models/User');
 const auth               = require('../middleware/auth');
 const requireModerator   = require('../middleware/requireModerator');
 const { recomputeBeachRisk } = require('../utils/riskService');
+const aiService              = require('../utils/aiService');
 
 const POINTS_ON_SUBMIT     = 5;
 const POINTS_ON_VERIFY     = 20;
@@ -46,6 +47,22 @@ router.post('/', auth, async (req, res) => {
     // Fire-and-forget risk recompute — never blocks the response
     recomputeBeachRisk(report.beachId).catch(err =>
       console.error('riskRecompute on create failed:', err.message));
+
+    // Fire-and-forget AI triage — scores the report 0..100 so moderators see
+    // priority order in the (future) web dashboard. Never blocks the response.
+    aiService.scoreReport({
+      type:     report.type,
+      severity: report.severity,
+      message:  report.message,
+      photoUrl: report.photoUrl,
+    }).then(triage => {
+      if (!triage) return;
+      return Report.findByIdAndUpdate(report._id, {
+        aiScore:  triage.score,
+        aiReason: triage.reason,
+      });
+    }).catch(err => console.error('AI triage failed:', err.message));
+
     res.status(201).json(report);
   } catch (err) {
     res.status(400).json({ error: err.message });

@@ -644,6 +644,8 @@ class _ReportSheetState extends State<_ReportSheet> {
   String? _photoUrl;
   bool _uploading = false;
   bool _loading   = false;
+  bool _aiLoading = false;
+  AiPhotoSuggestion? _aiSuggestion;
   double? _lat, _lng;
   Beach? _selectedBeach;
 
@@ -673,19 +675,41 @@ class _ReportSheetState extends State<_ReportSheet> {
   Future<void> _pickPhoto(ImageSource source) async {
     final f = await _picker.pickImage(source: source, imageQuality: 85, maxWidth: 1200);
     if (f == null || !mounted) return;
-    setState(() { _photo = File(f.path); _uploading = true; _photoUrl = null; });
+    setState(() {
+      _photo = File(f.path);
+      _uploading = true;
+      _photoUrl = null;
+      _aiSuggestion = null;
+    });
     final result = await StorageService.uploadPhoto(File(f.path));
     if (!mounted) return;
-    if (result.success) {
-      setState(() { _photoUrl = result.downloadUrl; _uploading = false; });
-    } else {
+    if (!result.success) {
       setState(() { _photo = null; _uploading = false; });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Échec photo: ${result.error}', style: CType.body(size: 12, color: Colors.white)),
         backgroundColor: CColors.redInk,
         behavior: SnackBarBehavior.floating,
       ));
+      return;
     }
+    setState(() { _photoUrl = result.downloadUrl; _uploading = false; _aiLoading = true; });
+
+    // Fire AI photo analysis — never blocks, just suggests
+    final suggestion = await ApiService.analyzePhoto(result.downloadUrl!);
+    if (!mounted) return;
+    setState(() { _aiLoading = false; _aiSuggestion = suggestion; });
+  }
+
+  void _acceptAiSuggestion() {
+    final s = _aiSuggestion;
+    if (s == null) return;
+    final mapped = ReportTypeX.fromApi(s.type);
+    setState(() {
+      _type = mapped;
+      _severity = s.severity;
+      if (_ctrl.text.trim().isEmpty) _ctrl.text = s.description;
+      _aiSuggestion = null;
+    });
   }
 
   Future<void> _submit() async {
@@ -877,6 +901,81 @@ class _ReportSheetState extends State<_ReportSheet> {
               ),
             ],
           ),
+          if (_aiLoading) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              decoration: BoxDecoration(
+                color: CColors.tealBg,
+                border: Border.all(color: CColors.tealLine),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: CColors.tealDark)),
+                  const SizedBox(width: 12),
+                  Text("L'IA analyse votre photo…",
+                      style: CType.body(size: 12, color: CColors.tealDark)),
+                ],
+              ),
+            ),
+          ],
+          if (_aiSuggestion != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              decoration: BoxDecoration(
+                color: CColors.tealBg,
+                border: Border.all(color: CColors.tealDark, width: 1.2),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(LucideIcons.sparkles, size: 14, color: CColors.tealDark),
+                      const SizedBox(width: 8),
+                      Eyebrow('SUGGESTION DE L\'IA · ${_aiSuggestion!.confidence.toUpperCase()}',
+                          size: 9, tracking: 0.22, color: CColors.tealDark),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => setState(() => _aiSuggestion = null),
+                        child: const Icon(LucideIcons.x, size: 14, color: CColors.grey),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${ReportTypeX.fromApi(_aiSuggestion!.type).label} · sévérité ${_aiSuggestion!.severity}/5',
+                    style: CType.serifDisplay(size: 15, color: CColors.tealDark),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(_aiSuggestion!.description,
+                      style: CType.body(size: 12, color: palette(context).inkSoft)),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: _acceptAiSuggestion,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          color: CColors.tealDark,
+                          child: Text('Accepter',
+                              style: CType.eyebrow(size: 10, tracking: 0.22, color: Colors.white)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      GestureDetector(
+                        onTap: () => setState(() => _aiSuggestion = null),
+                        child: Text('Ignorer',
+                            style: CType.body(size: 12, color: CColors.grey)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Row(
             children: [

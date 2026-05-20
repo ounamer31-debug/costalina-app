@@ -13,6 +13,7 @@ import '../models/signalement.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/storage_service.dart';
+import 'chat_screen.dart';
 import 'leaderboard_screen.dart';
 import 'rewards_screen.dart';
 import '../theme/app_theme.dart';
@@ -324,6 +325,14 @@ class _ProfilScreenState extends State<ProfilScreen> {
                     child: Column(
                       children: [
                         _DarkModeRow(s: s),
+                        const HairLine(color: CColors.tealLineSoft),
+                        _MenuRow(
+                          icon: LucideIcons.sparkles,
+                          label: 'Assistant IA',
+                          hint: 'Beta',
+                          onTap: () => Navigator.push(context,
+                              MaterialPageRoute(builder: (_) => const ChatScreen())),
+                        ),
                         const HairLine(color: CColors.tealLineSoft),
                         _MenuRow(
                           icon: LucideIcons.trophy,

@@ -298,6 +298,64 @@ class ApiService {
     );
   }
 
+  // ── AI ────────────────────────────────────────────────────────────────────
+
+  static Future<AiPhotoSuggestion?> analyzePhoto(String photoUrl) async {
+    final token = await AuthService.getToken();
+    if (token == null) return null;
+    try {
+      final res = await http.post(
+        Uri.parse('$_base/ai/analyze-photo'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'photoUrl': photoUrl}),
+      ).timeout(const Duration(seconds: 25));
+      if (res.statusCode != 200) return null;
+      final j = jsonDecode(res.body) as Map<String, dynamic>;
+      return AiPhotoSuggestion(
+        type:        j['type']        as String? ?? 'other',
+        severity:    (j['severity']   as num?)?.toInt() ?? 3,
+        description: j['description'] as String? ?? '',
+        confidence:  j['confidence']  as String? ?? 'medium',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<String?> aiChat(List<Map<String, String>> messages, {String lang = 'fr'}) async {
+    final token = await AuthService.getToken();
+    if (token == null) return null;
+    try {
+      final res = await http.post(
+        Uri.parse('$_base/ai/chat'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'messages': messages, 'lang': lang}),
+      ).timeout(const Duration(seconds: 25));
+      if (res.statusCode != 200) return null;
+      final j = jsonDecode(res.body) as Map<String, dynamic>;
+      return j['reply'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<AiForecast?> getBeachForecast(String beachId) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$_base/ai/forecast/$beachId'),
+      ).timeout(const Duration(seconds: 25));
+      if (res.statusCode != 200) return null;
+      final j = jsonDecode(res.body) as Map<String, dynamic>;
+      return AiForecast(
+        risk:       j['risk']       as String? ?? 'stable',
+        confidence: j['confidence'] as String? ?? 'low',
+        summary:    j['summary']    as String? ?? '',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Mappers ───────────────────────────────────────────────────────────────
 
   static Beach _beachFromJson(Map<String, dynamic> j) => Beach(
@@ -382,5 +440,29 @@ class LeaderboardEntry {
     required this.name,
     required this.avatarUrl,
     required this.points,
+  });
+}
+
+class AiPhotoSuggestion {
+  final String type;
+  final int severity;
+  final String description;
+  final String confidence;
+  const AiPhotoSuggestion({
+    required this.type,
+    required this.severity,
+    required this.description,
+    required this.confidence,
+  });
+}
+
+class AiForecast {
+  final String risk;       // 'stable' | 'modere' | 'eleve'
+  final String confidence; // 'low' | 'medium' | 'high'
+  final String summary;
+  const AiForecast({
+    required this.risk,
+    required this.confidence,
+    required this.summary,
   });
 }

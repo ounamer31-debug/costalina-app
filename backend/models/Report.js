@@ -15,6 +15,8 @@ const reportSchema = new mongoose.Schema({
   status:    { type: String, enum: ['pending', 'verified', 'resolved', 'rejected'], default: 'pending' },
   lat:       { type: Number, min: -90,  max: 90  },
   lng:       { type: Number, min: -180, max: 180 },
+  aiScore:   { type: Number, min: 0, max: 100 },
+  aiReason:  { type: String, maxlength: 240 },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Report', reportSchema);

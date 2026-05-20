@@ -63,6 +63,7 @@ app.use('/api/alerts',  require('./routes/alerts'));
 app.use('/api/uploads', require('./routes/uploads'));
 app.use('/api/users',   require('./routes/users'));
 app.use('/api/rewards', require('./routes/rewards'));
+app.use('/api/ai',      require('./routes/ai'));
 
 // Health check
 app.get('/api/health', (_, res) => res.json({ status: 'ok', time: new Date() }));
